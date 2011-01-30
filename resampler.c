@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sndfile.h>
+#include <math.h>
 
 #define TABLE_SIZE 24576
 #define OUTPUT "wave.h"
@@ -70,6 +71,18 @@ int main(int argc, char *argv[]) {
 		out_buf[i] = mono_buf[j];
 	}
 	free(mono_buf);
+	
+	// normalise (very important if you've only got 8 bits to play with)
+	y = 0;
+	for(i = 0; i < TABLE_SIZE; i++) {
+		if (fabs(out_buf[i]) > y) y = fabs(out_buf[i]);
+	}
+	if (y != 0) {
+		y = 1/y; 
+		for(i = 0; i < TABLE_SIZE; i++) {
+			out_buf[i] *= y;
+		}
+	}
 
 #if 0
 	// write the sample as an 8-bit wav at the correct sample rate
@@ -90,8 +103,9 @@ int main(int argc, char *argv[]) {
 	
 	fprintf(output, "PROGMEM  prog_uchar wave[]  = {\n");
 	for (i = 0; i < TABLE_SIZE; i++) {
-		fprintf(output, "%02x, ",out_buf[i]);
-		if (i & 0xff) fprintf(output, "\n");
+		j = 127 + (128 * out_buf[i]);
+		fprintf(output, "0x%02x, ", (unsigned char)j);
+		if ((i & 0xff)==0xff) fprintf(output, "\n");
 	}
 	fprintf(output, "};\n");
 	free(out_buf);
