@@ -1,10 +1,10 @@
 Files in this project so far:
 
-amen.wav - The classic Amen break, as re-recorded for freesound.org here:
+examples/amen.wav - The classic Amen break, as re-recorded for freesound.org here:
 http://www.freesound.org/samplesViewSingle.php?id=82508
 
-resampler.c - resamples a .wav file to the desired length (in this case, 24576 bytes)
+tools/resampler.c - resamples a .wav file to the desired length (in this case, 24576 bytes)
 and writes it out as a C header file for avr-gcc
 
-build.sh - crappy build script, really needs to be replaced with waf
+tools/build.sh - crappy build script, really needs to be replaced with waf
 
