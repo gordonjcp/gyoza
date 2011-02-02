@@ -8,3 +8,6 @@ and writes it out as a C header file for avr-gcc
 
 tools/build.sh - crappy build script, really needs to be replaced with waf
 
+looper/looper.pde - Arduino loop player with "circuit bending" sample processing
+looper/wave.h - the horking great hex file containing the sample
+
