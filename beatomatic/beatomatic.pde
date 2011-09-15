@@ -70,13 +70,18 @@ void loop() {
     // are we ready to do an update?
 		if (do_update) {
 			do_update = 0;
+			if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 			tempo_ct++;
-			if (tempo_ct > 120) {
+			if (tempo_ct > 100) {
+				tempo_ct=0;
+
+
 				s_ptr = 0; // reset sample playback
 				beat++;
 				if (beat>7) beat=0;
-				sample = beat*3072; // pointer to sample
-				s_tword = 120;  // tuning
+				beat = random(0,15);
+				sample = beat*1536; // pointer to sample
+				s_tword = 160;  // tuning
 			}
 			
 			
@@ -177,13 +182,12 @@ ISR(TIMER2_OVF_vect) {
 	out += 127;
 	out >>=1;
 */
-	if (out<0) { out=0; digitalWrite(13, LOW); }
-	if (out>0xff) { out=0xff; digitalWrite(13, LOW); }
+
 
 	OCR2A = out;
 
 	s_ptr += s_tword;
-	if (s_ptr>786175) s_tword=0; 
+	if (s_ptr>393215) s_tword=0; 
 }
 
 /* vim: set noexpandtab ai ts=4 sw=4 tw=4: */
