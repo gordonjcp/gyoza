@@ -72,7 +72,7 @@ void loop() {
 			do_update = 0;
 			if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 			tempo_ct++;
-			if (tempo_ct > 100) {
+			if (tempo_ct > 400-(analogRead(0)/3)) {
 				tempo_ct=0;
 
 
@@ -81,7 +81,7 @@ void loop() {
 				if (beat>7) beat=0;
 				beat = random(0,15);
 				sample = beat*1536; // pointer to sample
-				s_tword = 160;  // tuning
+				s_tword = s_tword=analogRead(1);  // tuning
 			}
 			
 			
@@ -183,8 +183,10 @@ ISR(TIMER2_OVF_vect) {
 	out >>=1;
 */
 
-
+	if (out>255) out=255;
+	if (out<0) out=0;
 	OCR2A = out;
+
 
 	s_ptr += s_tword;
 	if (s_ptr>393215) s_tword=0; 
