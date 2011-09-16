@@ -58,6 +58,7 @@ void setup() {
   // set up I/O
   pinMode(13, OUTPUT);    // gate LED
   pinMode(11, OUTPUT);    // PWM output
+  pinMode(3, OUTPUT);    // PWM output
   digitalWrite(13, LOW);  // LED off
 
   Setup_timer2();
@@ -104,9 +105,13 @@ void Setup_timer2() {
   cbi (TCCR2B, CS21);
   cbi (TCCR2B, CS22);
 
-  // Timer2 PWM Mode set to Phase Correct PWM
+  // Timer 2 PWM A on pin 11
   cbi (TCCR2A, COM2A0);  // clear Compare Match
   sbi (TCCR2A, COM2A1);
+
+  // Timer 2 PWM B on pin 3
+  cbi (TCCR2A, COM2B0);  // clear Compare Match
+  sbi (TCCR2A, COM2B1);
 
   sbi (TCCR2A, WGM20);  // Mode 1  / Phase Correct PWM
   cbi (TCCR2A, WGM21);
