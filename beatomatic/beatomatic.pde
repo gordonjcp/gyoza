@@ -6,8 +6,9 @@
 // Arduino DDS Sinewave Generator
 
 // Portions of the code based on nekobee
-// This will require changes to run directly as a MIDI synth,
-// or something like ALSABridge to interface to the serial port
+
+// Wire a pair 2.2k resistors between pin 3 and pin 11, and the audio input of your amp.
+
 
 #include "avr/pgmspace.h"
 #include "wave.h"
