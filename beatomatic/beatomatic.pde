@@ -66,74 +66,26 @@ void setup() {
 }
 
 void loop() {
-	while(1) {
+	//while(1) {
     // are we ready to do an update?
 		if (do_update) {
 			do_update = 0;
+			
+			// blink LED on beat
 			if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 			tempo_ct++;
+			
+			// play one beat
 			if (tempo_ct > 400-(analogRead(0)/3)) {
 				tempo_ct=0;
-
-
 				s_ptr = 0; // reset sample playback
 				beat++;
 				if (beat>7) beat=0;
 				beat = random(0,15);
 				sample = beat*1536; // pointer to sample
-				s_tword = s_tword=analogRead(1);  // tuning
+				s_tword = analogRead(1)/2+5;  // tuning
 			}
 			
-			
-      // got a message?
-      st = Serial.read();
-      if (st != 0xff) {
-        // if it's note on or note off
-        // do this rather crappy thing to get note and velocity
-        if (st == 0x80 || st == 0x90 || st == 0xb0) {
-          do {
-            p1 = Serial.read();
-          } while (p1 == 0xff);
-          do {
-            p2 = Serial.read();
-          } while (p2 == 0xff);
-        }
-        if (st == 0xb0) {
-           switch(p1) {
-              case 41: bitshift = p2 & 7;bitmask = 0x4fff ^ (bitamt<< bitshift);
-                  break;
-              case 23: { 
-                  int i;
-                  bitamt = 0;
-               for (i=0; i<7; i++) {   
-                  bitamt <<= 1;
-                   bitamt |= (p2 & 1);
-
-                  p2 >>=1;
-               }
-               Serial.println(bitamt, HEX);
-              bitmask = 0x4fff ^ (bitamt << bitshift);
-                  break;
-              }
-              case 29:
-                  mix = p2; break;
-           }
-              
-        }
-        if ((st == 0x90 && p2 == 0) || st == 0x80) {
-          // note off
-          digitalWrite(13, LOW);  // LED off
-        }
-        
-        if (st==0x90 && p2 > 0 && p1 >=60) {
-          digitalWrite(13, HIGH); // LED on
-          sample = (p1-60)*3072;
-          s_ptr = 0;
-          s_tword=126;
-        }
-        
-      }  // end of serial processing
-      
       // process updates
       
       // calculate DDS phase offset
@@ -143,7 +95,7 @@ void loop() {
       //Serial.println((float)s_ptr);
  
     }  // end of control update
-  }
+// }
 }
 
 void Setup_timer2() {
@@ -167,25 +119,8 @@ ISR(TIMER2_OVF_vect) {
 		do_update=1;
 		icnt1=0;
 	}   
-	
-  out = 0;
-	// calculate the sample output
-	// bitmask contains the "bend"
-	// mix sets the proportion of "bent" to clean output
-	out += (mix*pgm_read_byte_near(wave+sample+(((s_ptr>>8) & bitmask))))>>7;
-	out += ((127-mix)*pgm_read_byte_near(wave+sample+(s_ptr>>8)))>>7;
 
-//out = pgm_read_byte_near(wave+sample+(s_ptr>>8));
-
-/*
-	// DC restore and clip output
-	out += 127;
-	out >>=1;
-*/
-
-	if (out>255) out=255;
-	if (out<0) out=0;
-	OCR2A = out;
+	OCR2A = pgm_read_byte_near(wave+sample+(s_ptr>>8));
 
 
 	s_ptr += s_tword;
