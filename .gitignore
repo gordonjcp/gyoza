@@ -1,0 +1,5 @@
+.sconsign.dblite
+*.elf
+*.hex
+build/
+*~
