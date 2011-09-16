@@ -109,7 +109,7 @@ void loop() {
 			tempo_ct++;
 			
 			
-			s_gain = analogRead(0)>>2;  // tuning
+			s_gain = 127;// analogRead(0)>>2;  // tuning
 			
 			// play one beat
 			if (tempo_ct > 120) {
@@ -120,10 +120,10 @@ void loop() {
 
 				// slide?
 				if (slide & 1<<beat) {
-					digitalWrite(13, HIGH);
+					//digitalWrite(13, HIGH);
 				}
 				else {
-					digitalWrite(13, LOW);
+					//digitalWrite(13, LOW);
 					t_freq=freq;
 				}
 
@@ -138,8 +138,10 @@ void loop() {
 			
 				// if gate is 0, no output
 				if (gate & 1<<beat) {
+					digitalWrite(13, HIGH);
 					// don't mess with the gain
 				} else {
+					digitalWrite(13, LOW);
 					gain = 0;
 				}
 			
@@ -149,7 +151,7 @@ void loop() {
 
 				sample = random(0,15)*1536; // random drum pattern
 //				sample = beat*1536; // classic amen
-				s_tword = analogRead(1)/2+5;  // tuning
+				s_tword = 90;//analogRead(1)/2+5;  // tuning
 			}
 			
  
