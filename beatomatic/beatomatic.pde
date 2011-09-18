@@ -46,7 +46,7 @@ volatile byte do_update;               // count interrupts
 volatile unsigned long s_ptr1, s_ptr2, s_ptr3;
 volatile int out;
 
-byte beta;
+byte beta, gain;
 byte s_tword1, s_tword2, s_tword3;
 unsigned int sample;
 
@@ -61,7 +61,7 @@ int step=0;
 char notes[16];
 unsigned int slide, accent, gate;
 
-char drums[] = {1,8,9,0,2,0,1,0,4,4,0,0,2,0,8,0};
+char drums[] = {1,0,8,0, 3,0,8,0, 1,0,8,0, 3,0,8,0};
 
 
 
@@ -99,6 +99,14 @@ void loop() {
 	if (do_update) {	// every 1ms the timer goes off
 		do_update = 0;
 		
+		// every 2ms
+		decay *= decay_rate;
+		beta = (int)decay;
+
+		t_freq = (0.05*freq)+(0.95*t_freq);
+		tword_m = pow(2,32)*t_freq/refclk; 
+		
+		
 		// blink LED on beat
 		if (!(step & 0x03)) {
 			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
@@ -106,11 +114,40 @@ void loop() {
 		tempo_ct++;
 
 		// play one beat
-		// tempo is 15000/bpm for straight semiquavers
-		if (tempo_ct > (15000/120)) {
+		// tempo is 7500/bpm for straight semiquavers
+		if (tempo_ct > (3750/127)) {
 			tempo_ct=0;
-			step++;
-			if (step>15) step=0;
+
+			
+			// prepare the next note
+			decay = 127.0;
+			freq = pgm_read_float_near(pitchtable+notes[step]);
+
+			// slide?
+			if (slide & 1<<step) {
+				//digitalWrite(13, HIGH);
+			}
+			else {
+				//digitalWrite(13, LOW);
+				t_freq=freq;
+			}
+
+			// set accent?
+			if (accent & 1<<step) {
+				decay_rate = 0.975;
+			} else {
+				decay_rate = 0.98;
+			}
+		
+			// if gate is 0, no output
+			if (gate & 1<<step) {
+				digitalWrite(13, HIGH);
+				gain=1;
+			} else {
+				digitalWrite(13, LOW);
+				gain = 0;
+			}
+				
 			
 			// trigger drum sounds
 			if (drums[step] & 1) {
@@ -132,9 +169,8 @@ void loop() {
 				s_ptr2 = 0;
 				sample = 16383;
 			}
-
-
-			
+			step++;
+			if (step>15) step=0;
 		}
 			
  
@@ -162,7 +198,7 @@ void Setup_timer2() {
 
 ISR(TIMER2_OVF_vect) {
 	// internal timer
-	if(icnt1++ > 31) { // slightly faster than 1ms
+	if(icnt1++ > 127) { // slightly faster than 1ms
 		do_update=1;
 		icnt1=0;
 	}   
@@ -181,6 +217,23 @@ ISR(TIMER2_OVF_vect) {
 	if (s_ptr1>87376) s_tword1=0; // stop the voice
 	s_ptr2 += s_tword2;// s_tword;
 	if (s_ptr2>87376) s_tword2=0; // stop the voice
+
+#if 1	
+	// play bassline
+	phaccu=phaccu+tword_m;
+	icnt=phaccu >> 24;
+
+	ya = pgm_read_byte_near(sine256 + ((icnt+fba) & 0xff));
+	fba = (beta*(ya+fba))>>8;
+	//yb = pgm_read_byte_near(sine256 + ((icnt+fbb+128) & 0xff));
+	//fbb = (beta*(yb+fbb))>>8;
+
+	out = gain?ya>>1:80;
+	// clip
+//	if (out<0) out=0;
+//	if (out>0xff) out = 0xff;
+	OCR2B = out;
+#endif	
 
 }
 
