@@ -141,10 +141,8 @@ void loop() {
 		
 			// if gate is 0, no output
 			if (gate & 1<<step) {
-				digitalWrite(13, HIGH);
-				gain=1;
+				gain = 1;
 			} else {
-				digitalWrite(13, LOW);
 				gain = 0;
 			}
 				
