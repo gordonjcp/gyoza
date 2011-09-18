@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-#if 0
+#if 1
 	// write the sample as an 8-bit wav at the correct sample rate
 	sf_info.channels=1;
 	sf_info.samplerate = out_rate;
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
 	
 	fprintf(output, "PROGMEM  prog_uchar wave[]  = {\n");
 	for (i = 0; i < TABLE_SIZE; i++) {
-		j = 127 + (128 * out_buf[i]);
+		j = 128 + (127 * out_buf[i]);
 		fprintf(output, "0x%02x, ", (unsigned char)j);
 		if ((i & 0xff)==0xff) fprintf(output, "\n");
 	}

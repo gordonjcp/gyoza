@@ -11,7 +11,7 @@
 
 
 #include "avr/pgmspace.h"
-#include "wave.h"
+#include "drums.h"
 // handy macros for clearing or setting bits
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
@@ -53,8 +53,10 @@ byte beta;
 
 volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
-volatile byte ya, fba;            // y and feedback for gen A
-volatile byte yb, fbb;            // y and feedback for gen B
+byte ya, fba;            // y and feedback for gen A
+byte yb, fbb;            // y and feedback for gen B
+
+byte bd, sd, cl, ho, hc, ri;
 
 
 int tempo_ct=0;
@@ -109,8 +111,7 @@ void loop() {
 			//if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 			tempo_ct++;
 			
-			
-			s_gain = 127;// analogRead(0)>>2;  // tuning
+
 			
 			// play one beat
 			if (tempo_ct > 120) {
@@ -145,14 +146,16 @@ void loop() {
 					digitalWrite(13, LOW);
 					gain = 0;
 				}
-			
-				s_ptr = 0; // reset sample playback
+				
+				//sample = random(0,3)*5461; // random drum pattern
+				if (!(beat & 0x03)) bd=1;
+				
+				//if (!(beat & 0x07)) sd=0xff;
+				
 				beat++;
 				if (beat>15) beat=0;
 
-				sample = random(0,15)*1536; // random drum pattern
-//				sample = beat*1536; // classic amen
-				s_tword = 90;//analogRead(1)/2+5;  // tuning
+
 			}
 			
  
@@ -187,17 +190,23 @@ ISR(TIMER2_OVF_vect) {
 	}   
 
 	// play sample
-	out = pgm_read_byte_near(wave+sample+(s_ptr>>8));
-
-	out = ((s_gain*out)>>8)-(s_gain>>1)+127;
+	out = bd?pgm_read_byte_near(wave+(s_ptr>>2)):0x80;   // bass
+	//out += sd & pgm_read_byte_near(wave+5461+(s_ptr>>2)); // snare
+	//out = ((s_gain*out)>>8)-(s_gain>>1)+127;
 	// clip
+	out = out >> 1;
 	if (out<0) out=0;
 	if (out>0xff) out = 0xff;
 	OCR2A = out;
 
-	s_ptr += s_tword;
-	if (s_ptr>393215) s_tword=0; // if we've run off the end of the sample, stop
-	
+	s_ptr += 3;// s_tword;
+	if (s_ptr>21843) {
+		s_tword=0; // if we've run off the end of the sample, stop
+		s_ptr=0;
+		bd=0;
+	}
+
+#if 0
 	// play bassline
 	phaccu=phaccu+tword_m;
 	icnt=phaccu >> 24;
@@ -208,11 +217,12 @@ ISR(TIMER2_OVF_vect) {
 	fbb = (beta*(yb+fbb))>>8;
 
 
-	out = ((gain*ya-((beta*yb)>>7))>>8)-(gain>>1)+127;
+//	out = ((gain*ya-((beta*yb)>>7))>>8)-(gain>>1)+127;
 	// clip
 	if (out<0) out=0;
 	if (out>0xff) out = 0xff;
 	OCR2B = out;
+#endif
 }
 
 /* vim: set noexpandtab ai ts=4 sw=4 tw=4: */
