@@ -43,27 +43,26 @@ const double refclk=31376.6;      // measured
 volatile byte icnt;               // var inside interrupt
 volatile byte icnt1;              // var inside interrupt
 volatile byte do_update;               // count interrupts
-volatile byte gain = 100, s_gain = 100;               // output level
-volatile unsigned long s_ptr;
-volatile int s_tword;
-volatile int sample;
+volatile unsigned long s_ptr1, s_ptr2, s_ptr3;
 volatile int out;
 
 byte beta;
+byte s_tword1, s_tword2, s_tword3;
+unsigned int sample;
 
 volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
 byte ya, fba;            // y and feedback for gen A
 byte yb, fbb;            // y and feedback for gen B
 
-byte bd, sd, cl, ho, hc, ri;
-
-
 int tempo_ct=0;
 int step=0;
 
 char notes[16];
 unsigned int slide, accent, gate;
+
+char drums[] = {1,8,9,0,2,0,1,0,4,4,0,0,2,0,8,0};
+
 
 
 double freq, t_freq;    // note frequency
@@ -91,6 +90,7 @@ void setup() {
 	slide = random(0, 65536);
 	accent = random(0, 65536);
 	gate = random(0, 65536);
+	step = tempo_ct = 0;
 }
 
 
@@ -112,8 +112,28 @@ void loop() {
 			step++;
 			if (step>15) step=0;
 			
+			// trigger drum sounds
+			if (drums[step] & 1) {
+				s_tword1=16;
+				s_ptr1 = 0;
+			}
+			if (drums[step] & 2) {
+				s_tword2=15;
+				s_ptr2 = 0;
+				sample = 5461;
+			}
+			if (drums[step] & 4) {
+				s_tword2=15;
+				s_ptr2 = 0;
+				sample = 10922;
+			}
+			if (drums[step] & 8) {
+				s_tword2=15;
+				s_ptr2 = 0;
+				sample = 16383;
+			}
 
-			
+
 			
 		}
 			
@@ -148,8 +168,8 @@ ISR(TIMER2_OVF_vect) {
 	}   
 
 	// play sample
-	out = bd?pgm_read_byte_near(wave+(s_ptr>>2)):0x80;   // bass
-	//out += sd & pgm_read_byte_near(wave+5461+(s_ptr>>2)); // snare
+	out = pgm_read_byte_near(wave+(s_ptr1>>4));   // bass
+	out += pgm_read_byte_near(wave+sample+(s_ptr2>>4)); // snare
 	//out = ((s_gain*out)>>8)-(s_gain>>1)+127;
 	// clip
 	out = out >> 1;
@@ -157,12 +177,11 @@ ISR(TIMER2_OVF_vect) {
 	if (out>0xff) out = 0xff;
 	OCR2A = out;
 
-	s_ptr += 3;// s_tword;
-	if (s_ptr>21843) {
-		s_tword=0; // if we've run off the end of the sample, stop
-		s_ptr=0;
-		bd=0;
-	}
+	s_ptr1 += s_tword1;// s_tword;
+	if (s_ptr1>87376) s_tword1=0; // stop the voice
+	s_ptr2 += s_tword2;// s_tword;
+	if (s_ptr2>87376) s_tword2=0; // stop the voice
+
 }
 
 /* vim: set noexpandtab ai ts=4 sw=4 tw=4: */
