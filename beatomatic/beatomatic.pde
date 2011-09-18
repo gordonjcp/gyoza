@@ -60,7 +60,7 @@ byte bd, sd, cl, ho, hc, ri;
 
 
 int tempo_ct=0;
-int beat=0;
+int step=0;
 
 char notes[16];
 unsigned int slide, accent, gate;
@@ -95,72 +95,30 @@ void setup() {
 
 
 void loop() {
-	//while(1) {
     // are we ready to do an update?
-		if (do_update) {
-			do_update = 0;
+	if (do_update) {	// every 1ms the timer goes off
+		do_update = 0;
+		
+		// blink LED on beat
+		if (!(step & 0x03)) {
+			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+		}
+		tempo_ct++;
+
+		// play one beat
+		// tempo is 15000/bpm for straight semiquavers
+		if (tempo_ct > (15000/120)) {
+			tempo_ct=0;
+			step++;
+			if (step>15) step=0;
 			
-			decay *= 0.99;
-			beta = (int)decay;
-
-			t_freq = (0.05*freq)+(0.95*t_freq);
-			tword_m = pow(2,32)*t_freq/refclk; 
 
 			
-			// blink LED on beat
-			//if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
-			tempo_ct++;
 			
-
-			
-			// play one beat
-			if (tempo_ct > 120) {
-				tempo_ct=0;
-
-				decay = 127.0;
-				freq = pgm_read_float_near(pitchtable+notes[beat]);
-
-				// slide?
-				if (slide & 1<<beat) {
-					//digitalWrite(13, HIGH);
-				}
-				else {
-					//digitalWrite(13, LOW);
-					t_freq=freq;
-				}
-
-				// set accent?
-				if (accent & 1<<beat) {
-					gain = 120;
-					decay_rate = 0.975;
-				} else {
-					gain = 70;
-					decay_rate = 0.99;
-				}
-			
-				// if gate is 0, no output
-				if (gate & 1<<beat) {
-					digitalWrite(13, HIGH);
-					// don't mess with the gain
-				} else {
-					digitalWrite(13, LOW);
-					gain = 0;
-				}
-				
-				//sample = random(0,3)*5461; // random drum pattern
-				if (!(beat & 0x03)) bd=1;
-				
-				//if (!(beat & 0x07)) sd=0xff;
-				
-				beat++;
-				if (beat>15) beat=0;
-
-
-			}
+		}
 			
  
     }  // end of control update
-// }
 }
 
 void Setup_timer2() {
@@ -205,24 +163,6 @@ ISR(TIMER2_OVF_vect) {
 		s_ptr=0;
 		bd=0;
 	}
-
-#if 0
-	// play bassline
-	phaccu=phaccu+tword_m;
-	icnt=phaccu >> 24;
-
-	ya = pgm_read_byte_near(sine256 + ((icnt+fba) & 0xff));
-	fba = (beta*(ya+fba))>>8;
-	yb = pgm_read_byte_near(sine256 + ((icnt+fbb+128) & 0xff));
-	fbb = (beta*(yb+fbb))>>8;
-
-
-//	out = ((gain*ya-((beta*yb)>>7))>>8)-(gain>>1)+127;
-	// clip
-	if (out<0) out=0;
-	if (out>0xff) out = 0xff;
-	OCR2B = out;
-#endif
 }
 
 /* vim: set noexpandtab ai ts=4 sw=4 tw=4: */
