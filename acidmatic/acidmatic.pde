@@ -50,24 +50,18 @@ volatile int s_tword;
 volatile int sample;
 volatile int out;
 
-byte beta;
-
 volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
-byte ya, fba;            // y and feedback for gen A
-byte yb, fbb;            // y and feedback for gen B
 
-int d1, d2, d3, d4, hp, hp2;
-int cutoff, res;
+int d1, d2, hp, hp2;
 
-int i_cutoff, i_res;
+int i_cutoff, i_res, gain;
 
 int tempo_ct=0;
-int beat=0;
+int step=0;
 
 char notes[16];
 unsigned int slide, accent, gate;
-
 
 double freq, t_freq;    // note frequency
 float decay, decay_rate;
@@ -109,36 +103,35 @@ void setup() {
 	slide = random(0, 65536);
 	accent = random(0, 65536);
 	gate = random(0, 65536);
-	ya=yb=fba=fbb=0;
-	d1=d2=d3=d4=hp=hp2=127;
+
+	d1=d2=hp=127;
 }
-int gain = 127;
 
 void loop() {
 
+	int cutoff;
     // are we ready to do an update?
 		if (do_update) {
 			do_update = 0;
 			
-			decay *= 0.96;
+			decay *= decay_rate;
 			cutoff = analogRead(0) / 4;
 			
-			cutoff += 64*decay;
-			
-			
+			cutoff += 32*decay;
+
 			if (cutoff>211) cutoff=211;
 			i_cutoff = cutoff;
 			
 			cutoff = analogRead(1) / 4;
-			//gain = cutoff/2;
-			i_res = (258-cutoff);//gain;			
+			i_res = (276-cutoff);//gain;			
 			
 			t_freq = (0.05*freq)+(0.95*t_freq);
 			tword_m = pow(2,32)*t_freq/refclk; 
 
-			
-			// blink LED on beat
-			if (tempo_ct < 10)  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+		// blink LED on beat
+		if (!(step & 0x03)) {
+			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+		}
 			tempo_ct++;
 			
 			// play one beat
@@ -146,25 +139,33 @@ void loop() {
 				tempo_ct=0;
 
 
-				freq = pgm_read_float_near(pitchtable+notes[beat]);
+				freq = pgm_read_float_near(pitchtable+notes[step]);
 
 				// slide?
-				if (slide & 1<<beat) {
-					// yes, slide, so don't reset the envelope
-					//digitalWrite(13, HIGH);
-				}
-				else {
-					//digitalWrite(13, LOW);
+				if (slide & 1<<step) {
 					t_freq=freq;
 					decay = 1.0;
 				}
 
-				beat++;
-				if (beat>15) beat=0;
-
+			// set accent?
+			if (accent & 1<<step) {
+				decay_rate = 0.996;
+				gain = 96;
+			} else {
+				decay_rate = 0.97;
+				//gain = 127;
 			}
 			
- 
+						// if gate is 0, no output
+			if (gate & 1<<step) {
+				// flags are active high
+				//gain = 16;
+			}
+			step++;
+			step &= 0x0f;
+
+			
+  }
     }  // end of control update
 }
 
@@ -184,16 +185,16 @@ ISR(TIMER2_OVF_vect) {
 	icnt=phaccu >> 24;
 	
 	// simple squarewave
-	
 	out = icnt>127?192:64;
 
-//	out = (icnt>>1)+127;
+	// simple sawtooth
+	//out = (icnt>>1)+127;
 
-	d2 = CLAMP(d2 + ((i_cutoff*d1)>>8), -255, 255);
-	hp = CLAMP(out - d2 - ((d1*i_res)>>8), -255, 255);
-	d1 = CLAMP(((i_cutoff*hp)>>8) + d1, -255, 255);
+	d2 = CLIP(d2 + ((i_cutoff*d1)>>8));
+	hp = CLIP(out - d2 - ((d1*i_res)>>8));
+	d1 = CLIP(((i_cutoff*hp)>>8) + d1);
 
-	out=CLAMP(((gain*d2)>>7),0,255);
+	out=CLAMP(((gain*d2)>>8)-(gain>>1),0,255);
 	OCR2A = out;
 }
 
