@@ -14,21 +14,6 @@
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 
-//#define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
-
-
-
-PROGMEM  prog_uchar sine256[]  = {
-  127,130,133,136,139,143,146,149,152,155,158,161,164,167,170,173,176,178,181,184,187,190,192,195,198,200,203,205,208,210,212,215,217,219,221,223,225,227,229,231,233,234,236,238,239,240,
-  242,243,244,245,247,248,249,249,250,251,252,252,253,253,253,254,254,254,254,254,254,254,253,253,253,252,252,251,250,249,249,248,247,245,244,243,242,240,239,238,236,234,233,231,229,227,225,223,
-  221,219,217,215,212,210,208,205,203,200,198,195,192,190,187,184,181,178,176,173,170,167,164,161,158,155,152,149,146,143,139,136,133,130,127,124,121,118,115,111,108,105,102,99,96,93,90,87,84,81,78,
-  76,73,70,67,64,62,59,56,54,51,49,46,44,42,39,37,35,33,31,29,27,25,23,21,20,18,
-16,15,14,12,11,10,9,7,6,5,5,4,3,2,2,1,1,1,0,0,0,0,0,0,0,1,1,1,2,2,3,4,5,5,6,7,9,
-10,11,12,14,15,16,18,20,21,23,25,27,29,31,
-  33,35,37,39,42,44,46,49,51,54,56,59,62,64,67,70,73,76,78,81,84,87,90,93,96,99,
-102,105,108,111,115,118,121,124
-};
-
 PROGMEM float pitchtable[] = {
   8.18, 8.66, 9.18, 9.72, 10.30, 10.91, 11.56, 12.25, 12.98, 13.75, 14.57, 15.43, 16.35, 17.32, 18.35, 19.45, 20.60, 21.83, 23.12, 24.50, 25.96, 27.50, 29.14, 30.87, 32.70, 34.65, 36.71,
   38.89, 41.20, 43.65, 46.25, 49.00, 51.91, 55.00, 58.27, 61.74, 65.41, 69.30, 73.42, 77.78, 82.41, 87.31, 92.50, 98.00, 103.83, 110.00, 116.54, 123.47, 130.81, 138.59, 146.83, 155.56,
@@ -87,7 +72,7 @@ void setup() {
 	int i;
 	randomSeed(analogRead(5));
   Serial.begin(57600);
-  Serial.println("looper");
+  Serial.println("acidmatic");
   // set up I/O
   pinMode(13, OUTPUT);    // gate LED
   pinMode(11, OUTPUT);    // PWM output
@@ -105,25 +90,27 @@ void setup() {
 	gate = random(0, 65536);
 
 	d1=d2=hp=127;
+	tempo_ct = 65535;
 }
 
 void loop() {
 
 	int cutoff;
+	int envmod;
     // are we ready to do an update?
 		if (do_update) {
 			do_update = 0;
 			
 			decay *= decay_rate;
-			cutoff = analogRead(0) / 4;
+			//cutoff = analogRead(0) / 4;
+			cutoff = analogRead(0)/4;
 			
-			cutoff += 32*decay;
+			cutoff += 20*decay;
 
-			if (cutoff>211) cutoff=211;
-			i_cutoff = cutoff;
 			
-			cutoff = analogRead(1) / 4;
-			i_res = (276-cutoff);//gain;			
+			//cutoff = analogRead(1) / 4;
+			i_res = (276-analogRead(1)/4);//gain;
+			//i_res = 2//;		
 			
 			t_freq = (0.05*freq)+(0.95*t_freq);
 			tword_m = pow(2,32)*t_freq/refclk; 
@@ -142,19 +129,26 @@ void loop() {
 				freq = pgm_read_float_near(pitchtable+notes[step]);
 
 				// slide?
-				if (slide & 1<<step) {
+				if ( slide & 1<<step) {
 					t_freq=freq;
 					decay = 1.0;
 				}
 
 			// set accent?
 			if (accent & 1<<step) {
-				decay_rate = 0.996;
-				gain = 96;
+				decay_rate = 0.997;//(0.97+(analogRead(1)/34200.0f));
+				gain = 98;
+				//envmod = analogRead(0)/4;
 			} else {
 				decay_rate = 0.97;
-				//gain = 127;
+				//envmod = 30 + analogRead(0)/4;
+				gain = 127;
 			}
+			
+			
+				if (cutoff>211) cutoff=211;
+			i_cutoff = cutoff; //analogRead(1) / 4;
+		
 			
 						// if gate is 0, no output
 			if (gate & 1<<step) {
