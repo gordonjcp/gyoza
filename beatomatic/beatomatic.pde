@@ -63,89 +63,45 @@ unsigned int slide, accent, gate;
 
 char drums[] = {1,0,8,0, 3,0,8,0, 1,0,8,0, 3,0,8,0};
 
-
-
-double freq, t_freq;    // note frequency
-float decay, decay_rate;
-
+int run = 0;
 
 void setup() {
 	int i;
 	randomSeed(analogRead(5));
-  Serial.begin(57600);
-  Serial.println("looper");
-  // set up I/O
-  pinMode(13, OUTPUT);    // gate LED
-  pinMode(11, OUTPUT);    // PWM output
-  pinMode(3, OUTPUT);    // PWM output
-  digitalWrite(13, LOW);  // LED off
+	//Serial.begin(57600);
+	//Serial.println("looper");
+	// set up I/O
+	DDRB = 0x3f; // all high except 6 and 7
+	DDRD = 0xfa; // all high except RXD and PCINT18
 
-  Setup_timer2();
-  cbi(TIMSK0, TOIE0);    // timer0 int off
-  sbi(TIMSK2, TOIE2);    // timer2 int on
+	PORTB = 0x00;   // blank out port
+	PORTD = 0x04;   // pull up button
 
-	for (i=0; i<16; i++) {
-		notes[i] = random(20, 60);
-	}
-	slide = random(0, 65536);
-	accent = random(0, 65536);
-	gate = random(0, 65536);
-	step = tempo_ct = 0;
+	Setup_timer2();
+	cbi(TIMSK0, TOIE0);   // timer0 int off
+	sbi(TIMSK2, TOIE2);   // timer2 int on
+	
+	sbi(PCICR, PCIE2);	  // pin change interrupt
+	sbi(PCMSK2, PCINT18);
+
+	
 }
-
 
 void loop() {
     // are we ready to do an update?
 	if (do_update) {	// every 1ms the timer goes off
 		do_update = 0;
 		
-		// every 2ms
-		decay *= decay_rate;
-		beta = (int)decay;
-
-		t_freq = (0.05*freq)+(0.95*t_freq);
-		tword_m = pow(2,32)*t_freq/refclk; 
-		
-		
 		// blink LED on beat
 		if (!(step & 0x03)) {
-			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+//			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 		}
-		tempo_ct++;
+		if (run) tempo_ct++;
 
 		// play one beat
 		// tempo is 7500/bpm for straight semiquavers
-		if (tempo_ct > (3750/127)) {
+		if (tempo_ct > (3750/127) ) {
 			tempo_ct=0;
-
-			
-			// prepare the next note
-			decay = 127.0;
-			freq = pgm_read_float_near(pitchtable+notes[step]);
-
-			// slide?
-			if (slide & 1<<step) {
-				//digitalWrite(13, HIGH);
-			}
-			else {
-				//digitalWrite(13, LOW);
-				t_freq=freq;
-			}
-
-			// set accent?
-			if (accent & 1<<step) {
-				decay_rate = 0.975;
-			} else {
-				decay_rate = 0.98;
-			}
-		
-			// if gate is 0, no output
-			if (gate & 1<<step) {
-				gain = 1;
-			} else {
-				gain = 0;
-			}
-				
 			
 			// trigger drum sounds
 			if (drums[step] & 1) {
@@ -194,6 +150,12 @@ void Setup_timer2() {
   cbi (TCCR2B, WGM22);
 }
 
+ISR(PCINT2_vect) {
+	run = 1;
+	step = 0;
+	tempo_ct = 0;
+}
+
 ISR(TIMER2_OVF_vect) {
 	// internal timer
 	if(icnt1++ > 127) { // slightly faster than 1ms
@@ -216,22 +178,6 @@ ISR(TIMER2_OVF_vect) {
 	s_ptr2 += s_tword2;// s_tword;
 	if (s_ptr2>87376) s_tword2=0; // stop the voice
 
-#if 1	
-	// play bassline
-	phaccu=phaccu+tword_m;
-	icnt=phaccu >> 24;
-
-	ya = pgm_read_byte_near(sine256 + ((icnt+fba) & 0xff));
-	fba = (beta*(ya+fba))>>8;
-	//yb = pgm_read_byte_near(sine256 + ((icnt+fbb+128) & 0xff));
-	//fbb = (beta*(yb+fbb))>>8;
-
-	out = gain?ya>>1:80;
-	// clip
-//	if (out<0) out=0;
-//	if (out>0xff) out = 0xff;
-	OCR2B = out;
-#endif	
 
 }
 
