@@ -60,8 +60,9 @@ int i_cutoff, i_res, gain;
 int tempo_ct=0;
 int step=0;
 
-char drums[] = {1,0,8,0, 3,0,8,0, 1,0,8,0, 3,0,8,0};
+//char drums[] = {1,0,8,0, 3,0,8,0, 1,0,8,0, 3,0,8,0};
 //char drums[] = {1,0,8,8, 4,0,8,8, 9,0,8,8, 4,0,8,8};
+char drums[] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
 int run = 0;
 
 void setup() {
@@ -91,18 +92,22 @@ void loop() {
     // are we ready to do an update?
 	if (do_update) {	// every 1ms the timer goes off
 		do_update = 0;
-		i_res=260;
+		i_res=100;
 		i_cutoff = analogRead(0)/4;
 		// blink LED on beat
 		if (!(step & 0x03)) {
-			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+			//if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+			if (tempo_ct < (step?2:15))  PORTB = PORTB | 0x20; else PORTB = PORTB & 0xdf;
+
 		}
+		if (tempo_ct == 0)  PORTD = PORTD | 0x04; else PORTD = PORTD & 0xfb;
 		if (run) tempo_ct++;
 
 		// play one beat
 		// tempo is 7500/bpm for straight semiquavers
 		if (tempo_ct > (3750/127) ) {
 			tempo_ct=0;
+			PORTD = PORTD | 0x0c;
 			
 			// trigger drum sounds
 			if (drums[step] & 1) {
@@ -127,8 +132,6 @@ void loop() {
 			step++;
 			if (step>15) step=0;
 		}
-			
- 
     }  // end of control update
 }
 
@@ -175,13 +178,13 @@ ISR(TIMER2_OVF_vect) {
 	// clip
 	out = out >> 1;
 
-	/*
+	
 	// filter
 	d2 = CLIP(d2 + ((i_cutoff*d1)>>8));
 	hp = CLIP(out - d2 - ((d1*i_res)>>8));
 	d1 = CLIP(((i_cutoff*hp)>>8) + d1);
 	out=CLAMP(d2,0,255);
-	*/
+	
 	OCR2A = out;
 
 	s_ptr1 += s_tword1;// s_tword;

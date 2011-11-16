@@ -37,6 +37,7 @@ volatile int out;
 
 volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
+int trig, newpatt = 0, bar_ct=0;
 
 int d1, d2, hp, hp2;
 
@@ -68,38 +69,50 @@ void Setup_timer2() {
   cbi (TCCR2B, WGM22);
 }
 
-
-void setup() {
+void newpattern() {
 	int i;
-	randomSeed(analogRead(5));
-  Serial.begin(57600);
-  Serial.println("acidmatic");
-  // set up I/O
-	DDRB = 0x3f; // all high except 6 and 7
-	DDRD = 0x7f; // all high except RXD and PCINT18
-
-	PORTB = 0x00;   // blank out port
-	PORTD = 0x80;   // pull up button
-	
-	sbi(PCICR, PCIE2);	  // pin change interrupt
-	sbi(PCMSK2, PCINT23);
-	
-	run = PIND & 0x80;
-
-  Setup_timer2();
-  cbi(TIMSK0, TOIE0);    // timer0 int off
-  sbi(TIMSK2, TOIE2);    // timer2 int on
-
 	for (i=0; i<16; i++) {
 		notes[i] = random(20, 60);
 	}
 	slide = random(0, 65536);
 	accent = random(0, 65536);
 	gate = random(0, 65536);
+}
+
+void setup() {
+
+	randomSeed(analogRead(5));
+	
+	// set up I/O
+	DDRB = 0x3f; // all high except 6 and 7
+	DDRD = 0x72; // all high except RXD, 2, 3 and PCINT23
+
+	PORTB = 0x00;   // blank out port
+	PORTD = 0x88;   // pull up button
+	
+	pinMode(3, INPUT);
+	digitalWrite(3, HIGH);
+	
+	sbi(PCICR, PCIE2);	  // pin change interrupt
+	sbi(PCMSK2, PCINT23);
+	
+	run = PIND & 0x80;
+
+	Setup_timer2();
+	attachInterrupt(0, pulseinterrupt, RISING);
+	cbi(TIMSK0, TOIE0);    // timer0 int off
+	sbi(TIMSK2, TOIE2);    // timer2 int on
+
+	newpattern();
 
 	d1=d2=hp=127;
 	tempo_ct = 65534;   // ensure we're always going to start without waiting
+	
+	newpatt = 0;
+	digitalWrite(13, LOW);
 }
+
+
 
 void loop() {
 
@@ -109,6 +122,13 @@ void loop() {
 	if (do_update) {
 		do_update = 0;
 		
+		if (digitalRead(3)) {
+			newpatt=1;
+
+		}
+
+		digitalWrite(13, newpatt);
+
 		cutoff = analogRead(0)/4;
 		envmod = analogRead(1)/4;	
 		decay *= decay_rate;
@@ -127,13 +147,16 @@ void loop() {
 
 		// blink LED on beat
 		if (!(step & 0x03)) {
-			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+			//if (tempo_ct < (step?2:15))  PORTB = PORTB | 0x20; else PORTB = PORTB & 0xdf;
 		}
 		// update the tempo counter
 		if (run) tempo_ct++;
 			
 			// play one beat
-		if (tempo_ct > 120) {
+		//if (tempo_ct > 120) {
+		if (trig) {
+			trig = 0;
+			PORTD = 0x84;
 			tempo_ct=0; // reset timer
 			
 			// fetch note, get pitch
@@ -154,26 +177,37 @@ void loop() {
 				decay_rate = 0.97;
 				gain = 127;
 			}
-			
-			
+
 			// if gate is 0, no output
 			if (gate & 1<<step) {
 				// flags are active high
 				//gain = 16;
 			}
 			step++;
+			if (step==16 && newpatt) {
+				newpatt=0;
+				newpattern();
+				digitalWrite(13, LOW);
+			}
 			step &= 0x0f;
-
-			
-  }
+		}
+	PORTD = 0x80;
     }  // end of control update
 }
 
+void pulseinterrupt() {
+	trig = 1;
+	
+}
 ISR(PCINT2_vect) {
-	run = (PIND & 0x80);
-	step = 0;
-	tempo_ct = 0;
-	if (!run) gain=0;
+	if (PIND & 0x80) {
+		run = 1;
+		step = 0;
+		tempo_ct = 0;
+	} else {
+		run = 0;
+		gain=0;
+	}
 }
 #define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
 #define CLIP(x) (((x) > 255) ? 255 : (((x) < -255) ? 255 : (x)))
