@@ -46,23 +46,22 @@ volatile byte do_update;               // count interrupts
 volatile unsigned long s_ptr1, s_ptr2, s_ptr3;
 volatile int out;
 
-byte beta, gain;
 byte s_tword1, s_tword2, s_tword3;
 unsigned int sample;
 
 volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
-byte ya, fba;            // y and feedback for gen A
-byte yb, fbb;            // y and feedback for gen B
+
+int d1, d2, hp, hp2;
+
+int i_cutoff, i_res, gain;
+
 
 int tempo_ct=0;
 int step=0;
 
-char notes[16];
-unsigned int slide, accent, gate;
-
 char drums[] = {1,0,8,0, 3,0,8,0, 1,0,8,0, 3,0,8,0};
-
+//char drums[] = {1,0,8,8, 4,0,8,8, 9,0,8,8, 4,0,8,8};
 int run = 0;
 
 void setup() {
@@ -84,13 +83,16 @@ void setup() {
 	sbi(PCICR, PCIE2);	  // pin change interrupt
 	sbi(PCMSK2, PCINT23);
 	
+	run = PIND & 0x80;
+	
 }
 
 void loop() {
     // are we ready to do an update?
 	if (do_update) {	// every 1ms the timer goes off
 		do_update = 0;
-		
+		i_res=260;
+		i_cutoff = analogRead(0)/4;
 		// blink LED on beat
 		if (!(step & 0x03)) {
 			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
@@ -155,6 +157,10 @@ ISR(PCINT2_vect) {
 	tempo_ct = 0;
 }
 
+#define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
+#define CLIP(x) (((x) > 255) ? 255 : (((x) < -255) ? 255 : (x)))
+
+
 ISR(TIMER2_OVF_vect) {
 	// internal timer
 	if(icnt1++ > 127) { // slightly faster than 1ms
@@ -168,8 +174,14 @@ ISR(TIMER2_OVF_vect) {
 	//out = ((s_gain*out)>>8)-(s_gain>>1)+127;
 	// clip
 	out = out >> 1;
-	if (out<0) out=0;
-	if (out>0xff) out = 0xff;
+
+	/*
+	// filter
+	d2 = CLIP(d2 + ((i_cutoff*d1)>>8));
+	hp = CLIP(out - d2 - ((d1*i_res)>>8));
+	d1 = CLIP(((i_cutoff*hp)>>8) + d1);
+	out=CLAMP(d2,0,255);
+	*/
 	OCR2A = out;
 
 	s_ptr1 += s_tword1;// s_tword;

@@ -44,6 +44,7 @@ int i_cutoff, i_res, gain;
 
 int tempo_ct=0;
 int step=0;
+int run = 0;
 
 char notes[16];
 unsigned int slide, accent, gate;
@@ -74,9 +75,16 @@ void setup() {
   Serial.begin(57600);
   Serial.println("acidmatic");
   // set up I/O
-  pinMode(13, OUTPUT);    // gate LED
-  pinMode(11, OUTPUT);    // PWM output
-  digitalWrite(13, LOW);  // LED off
+	DDRB = 0x3f; // all high except 6 and 7
+	DDRD = 0x7f; // all high except RXD and PCINT18
+
+	PORTB = 0x00;   // blank out port
+	PORTD = 0x80;   // pull up button
+	
+	sbi(PCICR, PCIE2);	  // pin change interrupt
+	sbi(PCMSK2, PCINT23);
+	
+	run = PIND & 0x80;
 
   Setup_timer2();
   cbi(TIMSK0, TOIE0);    // timer0 int off
@@ -90,7 +98,7 @@ void setup() {
 	gate = random(0, 65536);
 
 	d1=d2=hp=127;
-	tempo_ct = 65535;
+	tempo_ct = 65534;   // ensure we're always going to start without waiting
 }
 
 void loop() {
@@ -98,59 +106,57 @@ void loop() {
 	int cutoff;
 	int envmod;
     // are we ready to do an update?
-		if (do_update) {
-			do_update = 0;
+	if (do_update) {
+		do_update = 0;
+		
+		cutoff = analogRead(0)/4;
+		envmod = analogRead(1)/4;	
+		decay *= decay_rate;
 			
-			decay *= decay_rate;
-			//cutoff = analogRead(0) / 4;
-			cutoff = analogRead(0)/4;
-			
-			cutoff += 20*decay;
+		cutoff += (analogRead(1)/4)*decay;
 
-			
-			//cutoff = analogRead(1) / 4;
-			i_res = (276-analogRead(1)/4);//gain;
-			//i_res = 2//;		
-			
-			t_freq = (0.05*freq)+(0.95*t_freq);
-			tword_m = pow(2,32)*t_freq/refclk; 
+		// clamp cutoff, and set "atomic" cutoff value	
+		if (cutoff>211) cutoff=211;
+		i_cutoff = cutoff; //analogRead(1) / 4;
+
+		i_res = 40; // fixed (high) resonance
+
+		// slide to target frequency, calculate timing word
+		t_freq = (0.05*freq)+(0.95*t_freq);
+		tword_m = pow(2,32)*t_freq/refclk; 
 
 		// blink LED on beat
 		if (!(step & 0x03)) {
 			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 		}
-			tempo_ct++;
+		// update the tempo counter
+		if (run) tempo_ct++;
 			
 			// play one beat
-			if (tempo_ct > 120) {
-				tempo_ct=0;
+		if (tempo_ct > 120) {
+			tempo_ct=0; // reset timer
+			
+			// fetch note, get pitch
+			freq = pgm_read_float_near(pitchtable+notes[step]);
 
-
-				freq = pgm_read_float_near(pitchtable+notes[step]);
-
-				// slide?
-				if ( slide & 1<<step) {
-					t_freq=freq;
-					decay = 1.0;
-				}
+			// slide?
+			if (slide & 1<<step) {
+				// no (bit high), just set the target frequency and reset the envelope
+				t_freq=freq;
+				decay = 1.0;
+			}
 
 			// set accent?
 			if (accent & 1<<step) {
 				decay_rate = 0.997;//(0.97+(analogRead(1)/34200.0f));
 				gain = 98;
-				//envmod = analogRead(0)/4;
 			} else {
 				decay_rate = 0.97;
-				//envmod = 30 + analogRead(0)/4;
 				gain = 127;
 			}
 			
 			
-				if (cutoff>211) cutoff=211;
-			i_cutoff = cutoff; //analogRead(1) / 4;
-		
-			
-						// if gate is 0, no output
+			// if gate is 0, no output
 			if (gate & 1<<step) {
 				// flags are active high
 				//gain = 16;
@@ -163,6 +169,12 @@ void loop() {
     }  // end of control update
 }
 
+ISR(PCINT2_vect) {
+	run = (PIND & 0x80);
+	step = 0;
+	tempo_ct = 0;
+	if (!run) gain=0;
+}
 #define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
 #define CLIP(x) (((x) > 255) ? 255 : (((x) < -255) ? 255 : (x)))
 
@@ -188,7 +200,7 @@ ISR(TIMER2_OVF_vect) {
 	hp = CLIP(out - d2 - ((d1*i_res)>>8));
 	d1 = CLIP(((i_cutoff*hp)>>8) + d1);
 
-	out=CLAMP(((gain*d2)>>8)-(gain>>1),0,255);
+	out=CLAMP(((gain*d2)>>7)-(gain>>1),0,255);
 	OCR2A = out;
 }
 
