@@ -72,18 +72,17 @@ void setup() {
 	//Serial.println("looper");
 	// set up I/O
 	DDRB = 0x3f; // all high except 6 and 7
-	DDRD = 0xfa; // all high except RXD and PCINT18
+	DDRD = 0x7f; // all high except RXD and PCINT18
 
 	PORTB = 0x00;   // blank out port
-	PORTD = 0x04;   // pull up button
+	PORTD = 0x80;   // pull up button
 
 	Setup_timer2();
 	cbi(TIMSK0, TOIE0);   // timer0 int off
 	sbi(TIMSK2, TOIE2);   // timer2 int on
 	
 	sbi(PCICR, PCIE2);	  // pin change interrupt
-	sbi(PCMSK2, PCINT18);
-
+	sbi(PCMSK2, PCINT23);
 	
 }
 
@@ -94,7 +93,7 @@ void loop() {
 		
 		// blink LED on beat
 		if (!(step & 0x03)) {
-//			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
+			if (tempo_ct < (step?2:15))  digitalWrite(13, HIGH); else digitalWrite(13, LOW);
 		}
 		if (run) tempo_ct++;
 
@@ -151,7 +150,7 @@ void Setup_timer2() {
 }
 
 ISR(PCINT2_vect) {
-	run = 1;
+	run = (PIND & 0x80);
 	step = 0;
 	tempo_ct = 0;
 }
