@@ -14,6 +14,14 @@
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 
+// analogue controls
+#define CUTOFF 0
+#define RESONANCE 1
+#define ENVMOD 2
+#define DECAY 3
+
+// wire four pots across 0V and 5V with the wiper going to the respective analogue input
+
 PROGMEM float pitchtable[] = {
   8.18, 8.66, 9.18, 9.72, 10.30, 10.91, 11.56, 12.25, 12.98, 13.75, 14.57, 15.43, 16.35, 17.32, 18.35, 19.45, 20.60, 21.83, 23.12, 24.50, 25.96, 27.50, 29.14, 30.87, 32.70, 34.65, 36.71,
   38.89, 41.20, 43.65, 46.25, 49.00, 51.91, 55.00, 58.27, 61.74, 65.41, 69.30, 73.42, 77.78, 82.41, 87.31, 92.50, 98.00, 103.83, 110.00, 116.54, 123.47, 130.81, 138.59, 146.83, 155.56,
@@ -51,7 +59,8 @@ char notes[16];
 unsigned int slide, accent, gate;
 
 double freq, t_freq;    // note frequency
-float decay, decay_rate;
+float vcf_decay, vcf_rate;
+float vca_decay, vca_rate;
 
 
 void Setup_timer2() {
@@ -77,6 +86,10 @@ void newpattern() {
 	slide = random(0, 65536);
 	accent = random(0, 65536);
 	gate = random(0, 65536);
+#if 0
+	accent = 65535;
+	slide = 1;
+#endif
 }
 
 void setup() {
@@ -110,14 +123,21 @@ void setup() {
 	
 	newpatt = 0;
 	digitalWrite(13, LOW);
+	run=1;
 }
 
+int cutoff, res, envmod, decay;
 
+void getpots() {
+	cutoff = analogRead(CUTOFF)/4;
+	res = 270-(analogRead(RESONANCE)/4);
+	envmod = analogRead(ENVMOD)/4;
+	decay = analogRead(DECAY)/4;
+}
 
 void loop() {
 
-	int cutoff;
-	int envmod;
+
     // are we ready to do an update?
 	if (do_update) {
 		do_update = 0;
@@ -127,19 +147,20 @@ void loop() {
 
 		}
 
-		digitalWrite(13, newpatt);
+		//digitalWrite(13, newpatt);
+		getpots();
+		
 
-		cutoff = analogRead(0)/4;
-		envmod = analogRead(1)/4;	
-		decay *= decay_rate;
+		vcf_decay *= vcf_rate;
 			
-		cutoff += (analogRead(1)/4)*decay;
+		cutoff += (envmod*(vcf_decay-0.15));
 
 		// clamp cutoff, and set "atomic" cutoff value	
 		if (cutoff>211) cutoff=211;
+		if (cutoff<2) cutoff=2;
 		i_cutoff = cutoff; //analogRead(1) / 4;
 
-		i_res = 40; // fixed (high) resonance
+		i_res = res;
 
 		// slide to target frequency, calculate timing word
 		t_freq = (0.05*freq)+(0.95*t_freq);
@@ -153,8 +174,8 @@ void loop() {
 		if (run) tempo_ct++;
 			
 			// play one beat
-		//if (tempo_ct > 120) {
-		if (trig) {
+		if (tempo_ct > 120) {
+		//if (trig) {
 			trig = 0;
 			PORTD = 0x84;
 			tempo_ct=0; // reset timer
@@ -166,15 +187,15 @@ void loop() {
 			if (slide & 1<<step) {
 				// no (bit high), just set the target frequency and reset the envelope
 				t_freq=freq;
-				decay = 1.0;
+				vcf_decay = 1.0;
 			}
 
 			// set accent?
 			if (accent & 1<<step) {
-				decay_rate = 0.997;//(0.97+(analogRead(1)/34200.0f));
+				vcf_rate = 0.97+(0.000113*decay);
 				gain = 98;
 			} else {
-				decay_rate = 0.97;
+				vcf_rate = 0.97;
 				gain = 127;
 			}
 
@@ -186,11 +207,14 @@ void loop() {
 			step++;
 			if (step==16 && newpatt) {
 				newpatt=0;
-				newpattern();
+				//newpattern();
 				digitalWrite(13, LOW);
 			}
 			step &= 0x0f;
 		}
+	
+	
+
 	PORTD = 0x80;
     }  // end of control update
 }
