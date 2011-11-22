@@ -14,6 +14,10 @@
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 
+#define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
+#define CLIP(x) (((x) > 255) ? 255 : (((x) < -255) ? 255 : (x)))
+
+
 // analogue controls
 #define CUTOFF 0
 #define RESONANCE 1
@@ -47,9 +51,9 @@ volatile unsigned long phaccu;   // phase accumulator
 volatile unsigned long tword_m;   // dds tuning word
 int trig, newpatt = 0, bar_ct=0;
 
-int d1, d2, hp, hp2;
+int d1=255, d2=255, hp=255;
 
-int i_cutoff, i_res, gain;
+int i_cutoff, i_res, i_gain;
 
 int tempo_ct=0;
 int step=0;
@@ -86,9 +90,20 @@ void newpattern() {
 	slide = random(0, 65536);
 	accent = random(0, 65536);
 	gate = random(0, 65536);
-#if 0
+#if 1
+	for (i=0; i<16; i++) {
+		notes[i] = 45; // A
+	}
 	accent = 65535;
-	slide = 1;
+	slide = 0x8888;
+#endif
+
+#if 1
+	accent = 65535;
+	slide = 0xffff;
+	slide = 0xefef;
+	gate = 0xfafa;
+	gate = 0xffff;
 #endif
 }
 
@@ -126,18 +141,39 @@ void setup() {
 	run=1;
 }
 
-int cutoff, res, envmod, decay;
+int cutoff, res, envmod, decay, gain;
+int i_gate;
 
-void getpots() {
+void voice_update() {
+	// read the pots
 	cutoff = analogRead(CUTOFF)/4;
-	res = 270-(analogRead(RESONANCE)/4);
+	res = analogRead(RESONANCE)/4;
 	envmod = analogRead(ENVMOD)/4;
 	decay = analogRead(DECAY)/4;
+
+	vca_rate = i_gate ? 0.9997:0.95;
+	
+	// run the envelopes
+	vcf_decay *= vcf_rate;
+	vca_decay *= vca_rate;
+		
+	// calculate the values for the sample engine
+	
+	// envelope is biased a little negative
+	cutoff += (envmod*(vcf_decay-0.15));
+	i_cutoff = CLAMP(cutoff, 2, 211);   // stable within these values
+	
+	i_res = 270-res;	// we may want to fiddle with the resonance
+
+	i_gain = vca_decay * 255;
+
+	// slide to target frequency, calculate timing word
+	t_freq = (0.05*freq)+(0.95*t_freq);
+	tword_m = pow(2,32)*t_freq/refclk; 
+	
 }
 
 void loop() {
-
-
     // are we ready to do an update?
 	if (do_update) {
 		do_update = 0;
@@ -147,24 +183,7 @@ void loop() {
 
 		}
 
-		//digitalWrite(13, newpatt);
-		getpots();
-		
-
-		vcf_decay *= vcf_rate;
-			
-		cutoff += (envmod*(vcf_decay-0.15));
-
-		// clamp cutoff, and set "atomic" cutoff value	
-		if (cutoff>211) cutoff=211;
-		if (cutoff<2) cutoff=2;
-		i_cutoff = cutoff; //analogRead(1) / 4;
-
-		i_res = res;
-
-		// slide to target frequency, calculate timing word
-		t_freq = (0.05*freq)+(0.95*t_freq);
-		tword_m = pow(2,32)*t_freq/refclk; 
+		voice_update();
 
 		// blink LED on beat
 		if (!(step & 0x03)) {
@@ -188,33 +207,32 @@ void loop() {
 				// no (bit high), just set the target frequency and reset the envelope
 				t_freq=freq;
 				vcf_decay = 1.0;
+
 			}
 
 			// set accent?
 			if (accent & 1<<step) {
 				vcf_rate = 0.97+(0.000113*decay);
-				gain = 98;
+				//gain = 98;
 			} else {
 				vcf_rate = 0.97;
-				gain = 127;
+				//gain = 127;
 			}
 
 			// if gate is 0, no output
 			if (gate & 1<<step) {
-				// flags are active high
-				//gain = 16;
+				i_gate=1;
+				vca_decay = 1.0;
+			} else {
+				i_gate = 0;
 			}
+			
 			step++;
-			if (step==16 && newpatt) {
-				newpatt=0;
-				//newpattern();
-				digitalWrite(13, LOW);
-			}
 			step &= 0x0f;
 		}
-	
-	
-
+		if ((slide & 1<<step) && tempo_ct>100) {
+			i_gate=0;
+		}
 	PORTD = 0x80;
     }  // end of control update
 }
@@ -233,8 +251,6 @@ ISR(PCINT2_vect) {
 		gain=0;
 	}
 }
-#define CLAMP(x, l, h) (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
-#define CLIP(x) (((x) > 255) ? 255 : (((x) < -255) ? 255 : (x)))
 
 ISR(TIMER2_OVF_vect) {
 	// internal timer
@@ -249,16 +265,19 @@ ISR(TIMER2_OVF_vect) {
 	icnt=phaccu >> 24;
 	
 	// simple squarewave
-	out = icnt>127?192:64;
+	out = icnt>127?183:72;
 
 	// simple sawtooth
-	//out = (icnt>>1)+127;
+	//out = (icnt>>1)+68;
 
-	d2 = CLIP(d2 + ((i_cutoff*d1)>>8));
+	d2 = CLAMP(d2 + ((i_cutoff*d1)>>8), 0, 255);
 	hp = CLIP(out - d2 - ((d1*i_res)>>8));
-	d1 = CLIP(((i_cutoff*hp)>>8) + d1);
+	d1 = CLIP(d1 + ((i_cutoff*hp)>>8));
 
-	out=CLAMP(((gain*d2)>>7)-(gain>>1),0,255);
+
+ 
+	out= (d2*i_gain)>>8;
+
 	OCR2A = out;
 }
 
