@@ -10,6 +10,7 @@
 // or something like ALSABridge to interface to the serial port
 
 #include "avr/pgmspace.h"
+#include "avr/interrupt.h"
 // handy macros for clearing or setting bits
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
@@ -56,6 +57,8 @@ unsigned int s_slide, s_accent, s_gate;
 
 double freq, t_freq;    // note frequency
 
+uint8_t pots[4] = { 0, 0, 0, 0 };
+const uint8_t nextpot[4] = { _BV(ADLAR) | 0b0001, _BV(ADLAR) | 0b0010, _BV(ADLAR) | 0b0011, _BV(ADLAR) | 0b0000 };
 int cutoff, res, envmod, decay, gain;
 int i_gate;
 
@@ -127,23 +130,21 @@ void setup() {
 	
 	pinMode(13,OUTPUT);
 	
-	cutoff=164;
-	res = 64;
-	envmod = 64;
-	decay = 64;
-	
 	vca_decay = 65535;
 
+	// first ADC read will be from ADC1 and left-adjusted (8bit)
+	ADMUX = _BV(ADLAR) | _BV(MUX1) | _BV(MUX0);
+	// enable ADC, start conversions, enable automatic trigger, enable conversion interrupt, enable /128 prescaler
+	ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADATE) | _BV(ADIE) | _BV(ADPS0)| _BV(ADPS1) | _BV(ADPS2);
+	// set to free-running conversion (ACME and ADTS[0,1,2] all 0)
+	ADCSRB = 0;
 }
 
-
 void read_pots() {
-	// read the pots
-	cutoff = analogRead(CUTOFF)>>2;
-	res = analogRead(RESONANCE)>>2;
-	envmod = analogRead(ENVMOD)>>2;
-	decay = analogRead(DECAY);
-
+	cutoff = pots[0];
+	res    = pots[1];
+	envmod = pots[2];
+	decay  = pots[3];
 }
 
 unsigned long i_f, i_tf;
@@ -198,8 +199,6 @@ void loop() {
 			
 			// fetch note, get pitch
 			i_f = 256*pgm_read_float_near(pitchtable + s_notes[step]);
-
-
 		
 			// slide?
 		//	i//f (s_slide & 1<<step) {
@@ -265,5 +264,19 @@ ISR(TIMER2_OVF_vect) {
 
 	OCR2A = CLIP0(out);
 }
+
+ISR(ADC_vect) {
+        uint8_t reading = ADCH;
+        static uint8_t first = 1;
+        if (first) {
+                first = 0;
+                return;
+        }
+        uint8_t mux;
+        mux = ADMUX & 0b00000111;
+        ADMUX = nextpot[mux];
+        pots[mux] = reading;
+}
+
 
 /* vim: set noexpandtab ai ts=4 sw=4 tw=4: */
